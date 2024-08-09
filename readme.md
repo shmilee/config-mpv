@@ -26,6 +26,9 @@ MPV
 
 * 文件 `scripts/danmuku.lua`
 * options `script-opts/danmuku.conf`
+    - `cache_dir`
     - `bin_path`
+    - `websites`
     - `download`
     - `convert`
+    - TODO `filter_file`
