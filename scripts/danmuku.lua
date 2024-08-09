@@ -8,8 +8,7 @@ converts to ass, then loads ass as sub-ass or subtitles in mpv.
 To configure this script use file danmuku.conf in directory script-opts
 (the "script-opts" directory must be in the mpv configuration directory,
 typically ~/.config/mpv/).
-Example configuration:
-
+Example configuration: see danmuku.conf
 
 # Ref:
 1. https://mpv.io/manual/master/#lua-scripting
@@ -30,56 +29,20 @@ local opts = require "mp.options"
 local msg = require("mp.msg")
 local osd_msg = require("mp.osd_message")
 
-local AVBV = {  -- AV号, BV号 --{{{
-    ref = 'https://www.zhihu.com/question/381784377/answer/1099438784',
-    t = 'fZodR9XQDSUm21yCkr6zBqiveYah8bt4xsWpHnJE7jL5VG3guMTKNPAwcF',
-    tr = {},
-    s = {12, 11, 4, 9, 5, 7},
-    xor = 177451812,
-    add = 8728348608,
-    max = 2^30,
-}
-for i = 1, 58 do
-    AVBV.tr[AVBV.t:sub(i,i)] = i - 1
-end
-
-function AVBV.decode(b)
-    local r = 0
-    for i = 1, 6 do
-        r = r + AVBV.tr[b:sub(AVBV.s[i], AVBV.s[i])] * 58^(i - 1)
-    end
-    r = (r - AVBV.add) ~ AVBV.xor
-    if r > AVBV.max then
-        return nil
-    else
-        return r
-    end
-end
-
-function AVBV.encode(a)
-    if a > AVBV.max then
-        return nil
-    end
-    a = (a ~ AVBV.xor) + AVBV.add
-    local r = {'B', 'V', '1', ' ', ' ', '4', ' ', '1', ' ', '7', ' ', ' '}
-    for i = 1, 6 do
-        local j = math.floor(a / 58^(i - 1) % 58) + 1
-        r[AVBV.s[i]] = AVBV.t:sub(j, j)
-    end
-    return table.concat(r)
-end
-
-function AVBV.test()
-    assert(AVBV.decode('BV17x411w7KC') == 170001, 'BV17x411w7KC -> 170001')
-    assert(AVBV.encode(882584971) == 'BV1mK4y1C7Bz', '882584971 -> BV1mK4y1C7Bz')
-end
--- AVBV --}}}
-
 local o = {
-    cache_dir = '~~cache/',  -- ~/.cache/mpv/; utils.split_path(os.tmpname())
-    bin_dir = '/usr/bin/:~/.local/bin/:~~home/bin/',  -- ~/.config/mpv/bin/
-    -- python+Danmu2Ass.py, curl+DanmakuFactory, or TODO curl+danmakuC
-    download_convert = 'curl+DanmakuFactory',
+    enable = true,
+    toggle_key_binding = '',  -- for ass Loader:toggle()
+    -- ~/.config/mpv/danmuku-data/cache/,
+    -- or ~/.cache/mpv/, utils.split_path(os.tmpname())
+    cache_dir = '~~home/danmuku-data/cache',
+    -- ~/.config/mpv/danmuku-data/bin/
+    bin_path = '~~home/danmuku-data/bin/:~/.local/bin/:/usr/bin/',
+    websites = 'bilibili_v1|bilibili_v2|acfun',
+    -- curl, others TODO
+    download = 'bilibili_v1=curl;bilibili_v2=TODO;acfun=TODO',
+    -- danmaku2ass.py, DanmakuFactory, danmakuC
+    convert = 'bilibili_v1=danmaku2ass.py;bilibili_v2=danmakuC;acfun=danmaku2ass.py',
+    -- setting for ass
     resolution = 'auto',  -- 屏幕分辨率 (自动取值) auto: like 1920x1080
     reserve = 0.2,  -- 保留底部多少高度的空白区域 0-1 (默认 0.2)
     fontname = "Microsoft YaHei",  -- 弹幕字体 (默认 微软雅黑)
@@ -87,7 +50,7 @@ local o = {
     alpha = 0.95,  -- 弹幕不透明度 0-1 (默认 0.95)
     duration_marquee = 10.0,  -- 滚动弹幕显示的持续时间 (默认 10秒)
     duration_stil = 5.0,  -- 静止弹幕显示的持续时间 (默认 5秒)
-    filter_file = "",  -- 弹幕屏蔽文件路径
+    filter_file = '~~home/danmuku-data/share/BBL.txt',  -- 弹幕屏蔽文件路径
 }
 opts.read_options(o, 'danmuku')
 
@@ -98,7 +61,7 @@ local myutil = {
         return info and info.is_file
     end,
     -- searching filename in directories `dpaths`
-    -- The dpaths can be splited by ':', for example o.bin_dir
+    -- The dpaths can be splited by ':', for example o.bin_path
     search_file = function(dpaths, filename)
         for d in string.gmatch(dpaths, "([^:]+)") do
             if d:match('^~') then
@@ -129,9 +92,18 @@ local myutil = {
         osd_msg(str, time)
     end,
     get_width_height = function()
-        local dw = 1920  -- mp.get_property_number('display-width', 1920)
-        local dh = 1080  -- mp.get_property_number('display-height', 1080)
-        local aspect = mp.get_property_number('width', 16) / mp.get_property_number('height', 9)
+        local dw, dh = string.match(o.resolution, '(%d+)x(%d+)')
+        if dw and dh then
+            dw, dh = tonumber(dw), tonumber(dh)
+        elseif o.resolution == 'auto' then
+            dw = mp.get_property_number('display-width', 1920)
+            dw = math.min(1920, math.max(1366, dw))
+            dh = mp.get_property_number('display-height', 1080)
+            dh = math.min(1080, math.max(768, dh))
+        end
+        local w = mp.get_property_number('width', 16)
+        local h = mp.get_property_number('height', 9)
+        local aspect = w / h
         if aspect > dw / dh then
             dh = math.floor(dw / aspect)
         elseif aspect < dw / dh then
@@ -139,6 +111,15 @@ local myutil = {
         end
         msg.verbose(string.format('aspect=%s, width=%s, height=%s', aspect, dw, dh))
         return dw, dh
+    end,
+    get_val_from_kvstr = function(kvstr, site)
+        -- kvstr, like 'site1=v1;site2=v2'
+        for kv in string.gmatch(kvstr, "([^;]+)") do
+            local k, v = string.match(kv, '([%w_]+)=(.*)')
+            if k == site then
+                return v
+            end
+        end
     end,
     async_run = function(args, callback)
         -- callback(success, result, error)
@@ -151,7 +132,7 @@ local myutil = {
     end,
 }
 
-local danmuku = {
+local Loader = {
     _2sub_visibility = mp.get_property_native("secondary-sub-visibility"),
     _2sub_ass_override = mp.get_property_native("secondary-sub-ass-override"),
     ass_file = nil,
@@ -205,10 +186,108 @@ local danmuku = {
             self:load_ass()
         end
     end,
+    worker = function(self, download_args, convert_args, assfile, callback)
+        myutil.log('弹幕正在装填')
+        myutil.async_run(download_args, function(success, result, err)
+            if err == nil then
+                myutil.log('弹幕正在上膛')
+                myutil.async_run(convert_args, function(succ, res, err)
+                    if err == nil then
+                        -- load danmu assfile
+                        self.ass_file = assfile
+                        self:load_ass()
+                        if callback then
+                            callback()
+                        end
+                    else
+                        myutil.log(err)
+                    end
+                end)
+            else
+                myutil.log(err)
+            end
+        end)
+    end,
 }
 
-local bilibili = {
-    match = function()
+local convert_args_lib = {
+    ['danmaku2ass.py'] = function(input, output, format, use_interpreter)
+        local script = myutil.search_file(o.bin_path, 'danmaku2ass.py')
+        if script == nil then
+            msg.warn('danmaku2ass.py not found!')
+            return
+        end
+        local dw, dh = myutil.get_width_height()
+        local args = {
+            script, '-f', format or 'autodetect', '-o', output,
+            '-s', string.format('%sx%s', dw, dh),
+            '-fn', o.fontname, '-fs',  o.fontsize, '-a', o.alpha,
+            '-dm', o.duration_marquee, '-ds', o.duration_still,
+            '-p', tostring(math.floor(o.reserve*dh)), '-r', input,
+        }
+        local file = mp.command_native({ "expand-path", o.filter_file })
+        if myutil.file_exists(file) then
+            table.insert(args, '-flf')
+            table.insert(args, file)
+        end
+        if use_interpreter then
+            local py3
+            if type(use_interpreter) == 'string' then
+                py3 = myutil.search_file(o.bin_path, use_interpreter)
+            end
+            if py3 == nil then  -- default interpreter
+                if myutil.platform == 'windows' then
+                    py3 = 'python.exe'
+                else
+                    py3 = 'python'
+                end
+                py3 = myutil.search_file(o.bin_path, py3) or py3
+            end
+            table.insert(args, 1, py3)
+        end
+        return args
+    end,
+    ['DanmakuFactory'] = function(input, output)
+        local cmd
+        if myutil.platform == 'windows' then
+            myutil.search_file(o.bin_path, 'DanmakuFactory.exe')
+        else
+            myutil.search_file(o.bin_path, 'DanmakuFactory')
+        end
+        if cmd == nil then
+            msg.warn('DanmakuFactory not found!')
+            return
+        end
+        local dw, dh = myutil.get_width_height()
+        local args = {
+            cmd, '-o', output, '-i', input,
+            '-r', string.format('%sx%s', dw, dh),
+            '-s', o.duration_marquee, '-f', o.duration_still,
+            '-N', o.fontname, '-S',  o.fontsize, '-O', o.alpha,
+            '-b', 'REPEAT', '--displayarea', 1.0 - o.reserve, '-d', '-1',
+        }
+        return args
+    end,
+    ['danmakuC'] = function(input, output)
+        local cmd = myutil.search_file(o.bin_path, 'danmakuC')
+        cmd = cmd or myutil.search_file(o.bin_path, 'danmakuC.exe')
+        if cmd == nil then
+            msg.warn('danmakuC not found!')
+            return
+        end
+        local dw, dh = myutil.get_width_height()
+        local args = {
+            cmd, input, '-o', output, '-s', string.format('%sx%s', dw, dh),
+            '-fn', o.fontname, '-fs',  o.fontsize, '-a', o.alpha,
+            '-dm', o.duration_marquee, '-ds', o.duration_still,
+            '-rb', tostring(math.floor(o.reserve*dh)), '-r',
+        }
+        return args
+    end,
+}
+
+local bilibili_v1 = {
+    match = function(self)
         for _, path in pairs({
                 mp.get_property("path", ''),
                 mp.get_property("stream-open-filename", ''),
@@ -226,9 +305,10 @@ local bilibili = {
             end
         end
     end,
-    cid = nil,
+    cid = nil, danmufile = nil, assfile = nil,
+    danmufile_namefmt = 'bilibili-%s.xml',
     danmaku_id = nil,  -- if exists, then remove it
-    setting_cid = function(self)
+    setting = function(self)
         local tracks = mp.get_property_native("track-list")
         for _, track in ipairs(tracks) do
             if track["lang"] == "danmaku" then
@@ -251,92 +331,122 @@ local bilibili = {
             end
         end
         msg.verbose(string.format('setting cid=%s', self.cid))
+        local f = string.format(self.danmufile_namefmt, self.cid)
+        self.danmufile = utils.join_path(o.cache_dir, f)
+        msg.verbose(string.format('setting danmufile=%s', self.danmufile))
+        f = string.format('bilibili-%s.ass', self.cid)
+        self.assfile = utils.join_path(o.cache_dir, f)
+        msg.verbose(string.format('setting assfile=%s', self.assfile))
     end,
-    get_danmu_cache = function(self, v2)
-        local filename
-        if v2 then
-            filename = string.format('bilibili-dm-proto-%s.bin', self.cid)
-        else
-            filename = string.format('bilibili-comment-%s.xml', self.cid)
-        end
-        return utils.join_path(o.cache_dir, filename)
-    end,
-    get_ass_cache = function(self)
-        local filename = string.format('bilibili-%s.ass', self.cid)
-        return utils.join_path(o.cache_dir, filename)
-    end,
-
-    work_with_python = function(self, use_interpreter)
-        local script = myutil.search_file(o.bin_dir, 'Danmu2Ass.py')
-        if script == nil then
-            msg.warn('Danmu2Ass.py not found!')
+    get_download_args = function(self)
+        local d = myutil.get_val_from_kvstr(o.download, 'bilibili_v1')
+        if d ~= 'curl' then
+            e = string.format('Unsupported download=%s for bilibili xml!', d)
+            msg.warn(e)
             return
         end
-        local args = {
-            script, '-o', self.get_ass_cache(),
-            '-s', string.format('%sx%s', myutil.get_width_height()),
-            '-fn', o.fontname, '-fs',  o.fontsize,
-            '-a', o.opacity,
-            '-dm', o.duration_marquee, '-ds', o.duration_still,
-            '-flf', mp.command_native({ "expand-path", o.filter_file }),
-            '-p', tostring(math.floor(o.percent*dh)),
-            '-r',
-            cid,
-        }
-        if use_interpreter then
-            local py3
-            if type(use_interpreter) == 'string' then
-                py3 = myutil.search_file(o.bin_dir, use_interpreter)
-            end
-            if py3 == nil then  -- default interpreter
-                if myutil.platform == 'windows' then
-                    py3 = 'python.exe'
-                else
-                    py3 = 'python'
-                end
-                py3 = myutil.search_file(o.bin_dir, py3) or py3
-            end
-            table.insert(args, 1, py3)
+        local curl =  myutil.search_file(o.bin_path, 'curl')
+        curl = curl or myutil.search_file(o.bin_path, 'curl.exe')
+        if curl == nil then
+            msg.warn('curl not found!')
+            return
         end
-        myutil.log('弹幕正在上膛')
-        myutil.async_run(args, function(success, result, err)
-        end)
+        -- https://github.com/SocialSisterYi/bilibili-API-collect/blob/cb4f767d4ee3f4f66b6caff04c9c40164ea4af54/docs/danmaku/danmaku_xml.md
+        -- https://api.bilibili.com/x/v1/dm/list.so
+        -- https://comment.bilibili.com/{{cid}}.xml
+        return {
+            curl, '-f', '-s', '-m', '10', '--compressed',
+            '-H', "User-Agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0'",
+            '-o', self.danmufile,
+            string.format('https://comment.bilibili.com/%s.xml', self.cid),
+        }
 
---            if err == nil then
---                danmu_file = ''..directory..'/bilibili.ass'
---                load_danmu(danmu_file)
---            else
---                log(err)
---            end
+    end,
+    get_convert_args = function(self)
+        local c = myutil.get_val_from_kvstr(o.convert, 'bilibili_v1')
+        if c == 'danmakuC ' then
+            e = string.format('Unsupported convert=%s for bilibili xml!', c)
+            msg.warn(e)
+            return
+        end
+        local args = convert_args_lib[c]
+        if args == nil then
+            return
+        end
+        if c == 'danmaku2ass.py' then
+            args = args(self.danmufile, self.assfile, nil, true)
+        else
+            args = args(self.danmufile, self.assfile)
+        end
+        return args
+    end,
+    callback = function()
+        if self.danmaku_id then
+            mp.commandv('sub-remove', self.danmaku_id)
+        end
     end,
 }
 
+local bilibili_v2 = setmetatable({
+    cid = nil, danmufile = nil, assfile = nil,
+    danmufile_namefmt = 'bilibili-pb-%s.bin',  -- Protobuf
+    danmaku_id = nil,  -- if exists, then remove it
+    get_download_args = function(self)
+        local d = myutil.get_val_from_kvstr(o.download, 'bilibili_v2')
+        if d ~= 'bilibili_protobuf.py' then  -- TODO
+            e = string.format('Unsupported download=%s for bilibili protobuf!', d)
+            msg.warn(e)
+            return
+        end
+        return {}  -- TODO
+    end,
+    get_convert_args = function(self)
+        local c = myutil.get_val_from_kvstr(o.convert, 'bilibili_v2')
+        if c ~= 'danmakuC ' then
+            e = string.format('Unsupported convert=%s for bilibili protobuf!', c)
+            msg.warn(e)
+            return
+        end
+        return convert_args_lib[c](self.danmufile, self.assfile)
+    end,
+}, { __index = bilibili_v1 })
 
+local acfun = {}  -- TODO
 
-function danmuku.curl_download(aid, cid, callback)
-    local curl = myutil.search_file(o.bin_dir, 'curl')
-    local args = {
-        curl, '-f', '-s', '-m', '10', '--compressed',
-        '-H', "User-Agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Edge/124.0.0.0'",
-    }
-    mp.command_native_async({
-		name = 'subprocess',
-		playback_only = false,
-		capture_stdout = true,
-		args = arg,
-		capture_stdout = true,
-        myutil.log('弹幕正在装填')
-    })
---#api.bilibili.com/x/v2/dm
-    local query = args.query or {}
-    for i, oneapi in pairs(apis) do
-        local cmd = get_curl_cmd(curl, oneapi)
-        util.print_info(string.format('API-usage cmd %d: %s', i, cmd), id)
-        table.insert(handles, {cmd, oneapi.get_info})
+local supported_websites = {
+    ['bilibili_v1'] = bilibili_v1,
+    ['bilibili_v2'] = bilibili_v2,
+    -- ['acfun'] = acfun,
+}
+
+local function main(site)
+    site:setting()
+    local d_args = site:get_download_args()
+    local c_args = site:get_convert_args()
+    if d_args and c_args and site.assfile then
+        mp.register_event("file-loaded", function()
+            Loader:worker(d_args, c_args, site.assfile, site.callback)
+        end)
+        if o.toggle_key_binding:match('^%a$') then
+            mp.add_key_binding(o.toggle_key_binding, 'toggle', function()
+                Loader:toggle()
+            end)
+        end
+        mp.register_event("end-file", function()
+            Loader:remove_ass()
+            mp.set_property_native("secondary-sub-visibility", Loader._2sub_visibility)
+            mp.set_property_native("secondary-sub-ass-override", Loader._2sub_ass_override)
+        end)
     end
-
 end
--- TODO
 
-
-
+-- start
+if o.enable then
+    for web in string.gmatch(o.websites, "([^|]+)") do
+        local site = supported_websites[web]
+        if site and type(site.match) == 'function' and site:match() then
+            main(site)
+            break
+        end
+    end
+end
