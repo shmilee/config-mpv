@@ -290,7 +290,7 @@ local convert_args_lib = {
             '-N', o.fontname, '-S', tostring(o.fontsize),
             '-O', tostring(math.floor(o.alpha*255)),
             '--displayarea', tostring(1.0 - o.reserve),
-            '-b', 'REPEAT', '-d', '-1',
+            '-b', 'REPEAT', '-d', '-1', '--ignore-warnings',
         }
         --debug_kv('args', args)
         return args
