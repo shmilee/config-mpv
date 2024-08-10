@@ -121,9 +121,9 @@ local myutil = {
             dw, dh = tonumber(dw), tonumber(dh)
         elseif o.resolution == 'auto' then
             dw = mp.get_property_number('display-width', 1920)
-            dw = math.min(1920, math.max(1366, dw))
+            dw = math.min(3840, math.max(1920, dw))
             dh = mp.get_property_number('display-height', 1080)
-            dh = math.min(1080, math.max(768, dh))
+            dh = math.min(2160, math.max(1080, dh))
         end
         local w = mp.get_property_number('width', 16)
         local h = mp.get_property_number('height', 9)
