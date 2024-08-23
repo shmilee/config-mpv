@@ -352,11 +352,12 @@ local bilibili_v1 = {
         end
         if self.cid == nil then
             local pat = "bilivideo%.c[nom]+.*/(%d+)-%d+-%d+%.m4s%?"  -- com cn
-            for _, path in { mp.get_property("path", ''),
-                             mp.get_property("stream-open-filename", ''),
-                            } do
+            for _, path in pairs({
+                    mp.get_property("path", ''),
+                    mp.get_property("stream-open-filename", ''),
+                    }) do
                 if path:find(pat) then
-                    self.cid = p:match(pat)
+                    self.cid = path:match(pat)
                     break
                 end
             end
