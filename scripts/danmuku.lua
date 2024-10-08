@@ -362,13 +362,17 @@ local bilibili_v1 = {
                 end
             end
         end
-        msg.verbose(strfmt('setting cid=%s', self.cid))
-        local f = strfmt(self.danmufile_namefmt, self.cid)
-        self.danmufile = myutil.get_cache_path(f)
-        msg.verbose(strfmt('setting danmufile=%s', self.danmufile))
-        f = strfmt('bilibili-%s.ass', self.cid)
-        self.assfile = myutil.get_cache_path(f)
-        msg.verbose(strfmt('setting assfile=%s', self.assfile))
+        if self.cid ~= nil then
+            msg.verbose(strfmt('setting cid=%s', self.cid))
+            local f = strfmt(self.danmufile_namefmt, self.cid)
+            self.danmufile = myutil.get_cache_path(f)
+            msg.verbose(strfmt('setting danmufile=%s', self.danmufile))
+            f = strfmt('bilibili-%s.ass', self.cid)
+            self.assfile = myutil.get_cache_path(f)
+            msg.verbose(strfmt('setting assfile=%s', self.assfile))
+        else
+            msg.warn("can't get cid!")
+        end
     end,
     get_download_args = function(self)
         local d = myutil.get_val_from_kvstr(o.download, 'bilibili_v1')
@@ -450,10 +454,12 @@ if o.enable then
             if site and type(site.match) == 'function' and site:match() then
                 msg.info(strfmt('Using %s to add danmaku ...', web))
                 site:setting()
-                local d_args = site:get_download_args()
-                local c_args = site:get_convert_args()
-                if d_args and c_args and site.assfile then
-                    Loader:worker(d_args, c_args, site.assfile)
+                if site.assfile then
+                    local d_args = site:get_download_args()
+                    local c_args = site:get_convert_args()
+                    if d_args and c_args then
+                        Loader:worker(d_args, c_args, site.assfile)
+                    end
                 end
                 break
             end
