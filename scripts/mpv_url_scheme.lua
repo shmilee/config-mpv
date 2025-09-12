@@ -293,9 +293,22 @@ Protocol_1.param_handlers = {
         end
         table.insert(t['_ytdl_format_sort'], string.format('+vcodec:%s', v))
     end,
+    ['v_title'] = function(k, v, t)
+        v = base64.safe_decode(v)
+        if v then
+            t['title'] = v
+            t['force-media-title'] = v
+        end
+    end,
     ['subfile'] = function(k, v, t)
         v = base64.safe_decode(v)
         table.insert(t['sub-files'], v)
+    end,
+    ['startat'] = function(k, v, t)
+        v = tonumber(v)
+        if v then
+            t['start'] = v
+        end
     end,
 }
 
@@ -303,7 +316,12 @@ function Protocol_1.parse(self, s)
     s = string.gsub(s, '^mpv%-debug://', 'mpv://')
     local t = {}
     local b64url = string.match(s, self.pattern_url)
-    t['stream-open-filename'] = o.ytdl_prefix .. base64.safe_decode(b64url)
+    local url = base64.safe_decode(b64url)
+    if url:match('.*%.m3u8$') then
+        t['stream-open-filename'] = url
+    else
+        t['stream-open-filename'] = o.ytdl_prefix .. url
+    end
     local query = string.match(s, self.pattern_param)
     if query then
         t['ytdl-raw-options'] = mp.get_property_native('ytdl-raw-options', {})
@@ -341,7 +359,8 @@ function Protocol_1.setting(self, t)
         mp.commandv("apply-profile", t['profile'])
     end
     myutils.setting_properties({
-        'stream-open-filename', 'ytdl-raw-options', 'sub-files',
+        'stream-open-filename', 'ytdl-raw-options',
+        'title', 'force-media-title', 'sub-files', 'start',
     }, t)
 end
 -- Protocol_1  -- }}}
