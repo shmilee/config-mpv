@@ -57,13 +57,17 @@ local o = {
     -- ~/.config/mpv/danmuku-data/cache/,
     -- or ~/.cache/mpv/, utils.split_path(os.tmpname())
     cache_dir = '~~home/danmuku-data/cache/',
+    -- setting for curl
+    curl_timeout = 25.0,  -- 下载单次超时时间 (默认 25秒)
+    curl_retries = 3,     -- 下载重试次数
     -- setting for ass
     resolution = 'auto',  -- 屏幕分辨率 (自动取值) auto: like 1920x1080
-    reserve = 0.2,  -- 保留底部多少高度的空白区域 0-1 (默认 0.2)
+    reserve = 0.3,  -- 保留底部多少高度的空白区域 0-1 (默认 0.3)
     fontname = mp.get_property('sub-font'),  -- 弹幕字体 (默认 sans-serif)
-    fontsize = 50.0,  -- 字体大小 (默认 5.0)
-    alpha = 0.95,  -- 弹幕不透明度 0-1 (默认 0.95)
-    duration_marquee = 10.0,  -- 滚动弹幕显示的持续时间 (默认 10秒)
+    fontsize = 38,  -- 字体大小 (默认 38 像素)
+    fontshadow = 1, -- 字体阴影深度 0-4  (默认 1)
+    alpha = 0.95,   -- 弹幕不透明度 0-1 (默认 0.95)
+    duration_marquee = 12.0,  -- 滚动弹幕显示的持续时间 (默认 12秒)
     duration_still = 5.0,  -- 静止弹幕显示的持续时间 (默认 5秒)
     filter_file = '~~home/danmuku-data/share/BBL.txt',  -- 弹幕屏蔽文件路径
 }
@@ -205,14 +209,15 @@ local Curl = {
     default_settings = {
         silent = true,      -- -s 静默模式
         show_error = true,  -- -S 在静默模式下显示错误
-        follow_redirects = true, -- -L 跟随重定向
+        follow_redirects = true,  -- -L 跟随重定向
         fail_fast = true,   -- 快速失败，遇到 HTTP 错误不输出任何内容
         compressed = false, -- 支持压缩响应，并自动解压内容
-        timeout = 10,       -- 超时时间(秒)
+        continue = false,   -- 断点续传，多数弹幕网站不支持
+        timeout = o.curl_timeout,  -- 超时时间(秒)
         method = "GET",     -- 请求方法(GET/POST)
         user_agent = nil,   -- 自定义User-Agent
         headers = {},       -- 自定义请求头
-        retries = 1,        -- 重试次数
+        retries = o.curl_retries,  -- 重试次数
         retry_delay = 1.0   -- 重试延迟(秒) + math.random()
     },
     -- 必须有 args.output args.url
@@ -232,8 +237,12 @@ local Curl = {
         if args.silent then table.insert(curl_args, "-s") end
         if args.show_error then table.insert(curl_args, "-S") end
         if args.follow_redirects then table.insert(curl_args, "-L") end
-        if args.fail_fast then  table.insert(curl_args, "-f") end
+        if args.fail_fast then table.insert(curl_args, "-f") end
         if args.compressed then table.insert(curl_args, "--compressed") end
+        if args.continue then
+            table.insert(curl_args, "-C")
+            table.insert(curl_args, "-") -- automatically find offset
+        end
         if args.timeout then 
             table.insert(curl_args, "-m")
             table.insert(curl_args, tostring(args.timeout))
@@ -380,9 +389,11 @@ local DanmakuFactory = {
                 '-s', tostring(o.duration_marquee),
                 '-f', tostring(o.duration_still),
                 '-N', o.fontname, '-S', tostring(o.fontsize),
+                '-D', tostring(o.fontshadow),
                 '-O', tostring(math.floor(o.alpha*255)),
                 '--displayarea', tostring(1.0 - o.reserve),
                 '-b', 'REPEAT', '-d', '-1', '--ignore-warnings',
+                '--saveblocked', 'false',
             }) do
             table.insert(args, conf)
         end
@@ -517,7 +528,6 @@ local Bilibili = setmetatable({
             headers = {
                 "Referer: https://www.bilibili.com/",
             },
-            retries = 2,
         }
     end,
 }, { __index = DanmuManager })
@@ -662,7 +672,6 @@ local ExternalDanmaku = setmetatable({
                 'Accept: application/xml, text/xml, */*',
                 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8',
             },
-            retries = 2,
         }
         local relative_xmls = {}
         for i, url in ipairs(external_danmaku_xmlurls) do
