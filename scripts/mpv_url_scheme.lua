@@ -310,6 +310,13 @@ Protocol_1.param_handlers = {
             t['start'] = v
         end
     end,
+    ['danmaku_xmlurl'] = function(k, v, t)
+        v = base64.safe_decode(v)
+        if v then
+            t['danmaku-xmlurls'] = t['danmaku-xmlurls'] or {}
+            table.insert(t['danmaku-xmlurls'], v)
+        end
+    end,
 }
 
 function Protocol_1.parse(self, s)
@@ -362,6 +369,13 @@ function Protocol_1.setting(self, t)
         'stream-open-filename', 'ytdl-raw-options',
         'title', 'force-media-title', 'sub-files', 'start',
     }, t)
+    -- 通过 script-message 传递弹幕URL给 danmuku.lua
+    if t['danmaku-xmlurls'] then
+        for _, url in ipairs(t['danmaku-xmlurls']) do
+            msg.info("Sending danmaku xml URL: " .. url)
+            mp.commandv("script-message", "danmaku-xmlurl", url)
+        end
+    end
 end
 -- Protocol_1  -- }}}
 
