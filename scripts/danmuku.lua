@@ -19,6 +19,10 @@ Example configuration: see danmuku.conf
 6. https://github.com/HFrost0/bilix/blob/0239d332472eb496a865b2117d1c8b4e93a8b19a/bilix/sites/bilibili/api.py#L563-L568
 7. https://github.com/jnxyp/Bilibili-Block-List
 
+# TODO json danmu support
+1. https://api.danmu.icu/?url=
+2. https://github.com/huangxd-/danmu_api
+
 Copyright (c) 2024-2025 shmilee
 Licensed under GNU General Public License v2:
 https://opensource.org/licenses/GPL-2.0
@@ -343,7 +347,7 @@ Curl.run_multiple_requests = function(requests_list, final_callback)
                 costime = os.time() - startime,
             }
             completed = completed + 1
-            local status = success and "✓" or "✗"
+            local status = success and "✔" or "✗"
             msg.info(strfmt("%s Download completed %d/%d: %s", status, completed, total, request_args.url))
             if request_args.callback then -- 单个请求的回调（如果存在）
                 request_args.callback(success, data, err)
@@ -414,7 +418,7 @@ DanmakuFactory.convert = function(xml_files, output_ass, callback)
     msg.verbose('Converting XML to ASS using cmd = ' .. table.concat(args, " "))
     myutil.async_run(args, function(success, result, err)
         if success and result.status == 0 then
-            msg.info("✓ Successfully converted XML to ASS: " .. output_ass:gsub(myutil.HOME, '~'))
+            msg.info("✔ Successfully converted XML to ASS: " .. output_ass:gsub(myutil.HOME, '~'))
             if callback then callback(true, result, err) end
         else
             local error_msg = err or "DanmakuFactory conversion failed"
