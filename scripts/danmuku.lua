@@ -76,6 +76,8 @@ opts.read_options(o, 'danmuku')
 
 local myutil = {
     platform = mp.get_property('platform', ''),
+    HOME = mp.command_native({"expand-path", '~/'}),
+    MPV_HOME = mp.command_native({"expand-path", '~~/home/'}),
     file_exists = function(path)
         local info, err = utils.file_info(path)
         return info and info.is_file
@@ -183,7 +185,7 @@ myutil.ensure_dir = function(path)
         else
             cmd = string.format('mkdir -p "%s"', dir)
         end
-        msg.info('Making dir by:', cmd)
+        msg.info('Making dir by:', cmd:gsub(myutil.HOME, '~'))
         os.execute(cmd)
     end
     return true
@@ -341,8 +343,8 @@ Curl.run_multiple_requests = function(requests_list, final_callback)
                 costime = os.time() - startime,
             }
             completed = completed + 1
-            local status = success and "(success)" or " (failed)"
-            msg.info(strfmt("Download completed %d/%d: %s %s", completed, total, status, request_args.url))
+            local status = success and "✓" or "✗"
+            msg.info(strfmt("%s Download completed %d/%d: %s", status, completed, total, request_args.url))
             if request_args.callback then -- 单个请求的回调（如果存在）
                 request_args.callback(success, data, err)
             end
@@ -412,7 +414,7 @@ DanmakuFactory.convert = function(xml_files, output_ass, callback)
     msg.verbose('Converting XML to ASS using cmd = ' .. table.concat(args, " "))
     myutil.async_run(args, function(success, result, err)
         if success and result.status == 0 then
-            msg.info("Successfully converted XML to ASS: " .. output_ass)
+            msg.info("✓ Successfully converted XML to ASS: " .. output_ass:gsub(myutil.HOME, '~'))
             if callback then callback(true, result, err) end
         else
             local error_msg = err or "DanmakuFactory conversion failed"
@@ -422,7 +424,7 @@ DanmakuFactory.convert = function(xml_files, output_ass, callback)
             if result and result.stderr and #result.stderr > 0 then
                 error_msg = error_msg .. ": " .. result.stderr
             end
-            msg.error(error_msg)
+            msg.error("✗ " .. error_msg)
             if callback then callback(false, result, err) end
         end
     end)
@@ -696,7 +698,7 @@ local Loader = {
     loaded_sid = nil,
     load_ass = function(self)  -- load function
         if not myutil.file_exists(self.ass_file) then
-            msg.warn(strfmt('Ass file %s not found!', self.ass_file))
+            msg.warn(strfmt('Ass file %s not found!', self.ass_file:gsub(myutil.HOME, '~')))
             return
         end
         myutil.log('开火')
@@ -766,7 +768,7 @@ local Loader = {
                     if myutil.file_exists(xml_file) then
                         table.insert(okxmls, xml_file)
                     else
-                        msg.error('Lost xml file:', xml_file)
+                        msg.error('Lost xml file:', xml_file:gsub(myutil.HOME, '~'))
                     end
                 end
             end
