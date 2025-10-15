@@ -3,10 +3,11 @@ Type=Application
 Name=mpv-url-handler
 GenericName=Multimedia player
 Comment=Play URL Scheme mpv:// for website videos and songs with mpv & yt-dlp
-Exec=mpv -- %U
+Exec=mpv --log-file=/tmp/mpv-url.log -- %U
 Icon=mpv
-MimeType=x-scheme-handler/mpv;
+MimeType=x-scheme-handler/mpv;x-scheme-handler/mpv-handler;
 # xdg-mime default mpv-url.desktop x-scheme-handler/mpv
+# xdg-mime default mpv-url.desktop x-scheme-handler/mpv-handler
 Categories=AudioVideo;Audio;Video;Player;TV;
 Terminal=false
 NoDisplay=true
