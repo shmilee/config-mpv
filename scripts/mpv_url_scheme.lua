@@ -333,7 +333,7 @@ function Protocol_1.parse(self, s)
     local t = {}
     local b64url = string.match(s, self.pattern_url)
     local url = base64.safe_decode(b64url)
-    if url:match('.*%.m3u8$') then
+    if url:match('.*registered%.m3u8%?key%=.*') then
         t['stream-open-filename'] = url
     else
         t['stream-open-filename'] = o.ytdl_prefix .. url
