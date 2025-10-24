@@ -83,6 +83,7 @@ local myutil = {
     HOME = mp.command_native({"expand-path", '~/'}),
     MPV_HOME = mp.command_native({"expand-path", '~~/home/'}),
     file_exists = function(path)
+        if path == nil then return false end
         local info, err = utils.file_info(path)
         return info and info.is_file
     end,
